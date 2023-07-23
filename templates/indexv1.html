@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>System Vitals</title>
+    <script>
+function formatSpeed_disk(speedInBytesPerSecond) {
+    let speedInKbps = speedInBytesPerSecond / 1024;  // Convert bytes to kilobytes
+    if (speedInKbps < 1024) {
+        return `${speedInKbps.toFixed(2)} KB/s`;
+    } else {
+        let speedInMBps = speedInKbps / 1024;  // Convert kilobytes to megabytes
+        return `${speedInMBps.toFixed(2)} MB/s`;
+    }
+}
+        let isRefreshing = true;
+        
+        function formatSpeed(speedInBytesPerSecond) {
+    let speedInBitsPerSecond = speedInBytesPerSecond * 8;  // Convert bytes to bits
+    let speedInKbps = speedInBitsPerSecond / 1024;  // Convert bits to kilobits
+    if (speedInKbps < 1024) {
+        return `${speedInKbps.toFixed(2)} Kbps`;
+    } else {
+        let speedInMbps = speedInKbps / 1024;  // Convert kilobits to megabits
+        return `${speedInMbps.toFixed(2)} Mbps`;
+    }
+}
+
+function refreshData() {
+    if (!isRefreshing) {
+        return;
+    }
+
+    fetch('/data')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('cpu-usage').textContent = data.cpu;
+            document.getElementById('ram-usage').textContent = data.ram;
+            document.getElementById('disk-read').textContent = formatSpeed_disk(data.disk.read_speed);
+            document.getElementById('disk-write').textContent = formatSpeed_disk(data.disk.write_speed);
+            document.getElementById('network-send').textContent = formatSpeed(data.network.sent_speed);
+            document.getElementById('network-receive').textContent = formatSpeed(data.network.recv_speed);
+        })
+        .catch((error) => {
+            console.error('Error:', error);
+        });
+
+    setTimeout(refreshData, 1000);
+}
+
+
+        function toggleRefresh() {
+            isRefreshing = !isRefreshing;
+            const buttonText = isRefreshing ? "Stop refreshing" : "Start refreshing";
+            document.getElementById('refresh-button').textContent = buttonText;
+            refreshData();
+        }
+    </script>
+</head>
+<body onload="refreshData()">
+    <h1>System Vitals</h1>
+    <button id="refresh-button" onclick="toggleRefresh()">Stop refreshing</button>
+    <h2>CPU Usage</h2>
+    <p>Total: <span id="cpu-usage"></span>%</p>
+    <p id="cpu-cores"></p>
+    <h2>RAM Usage</h2>
+    <p><span id="ram-usage"></span>%</p>
+    <h2>Disk IO (Bytes/sec)</h2>
+    <p>Read: <span id="disk-read"></span></p>
+    <p>Write: <span id="disk-write"></span></p>
+    <h2>Network (Kbps/Mbps)</h2>
+    <p>Send: <span id="network-send"></span></p>
+    <p>Receive: <span id="network-receive"></span></p>
+</body>
+</html>

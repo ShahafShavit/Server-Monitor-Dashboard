@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+
+
+    <title>System Vitals</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+
+        let isRefreshing = true;
+        let cpuData = [];
+        let cpuLabels = [];
+        let cpuChart;
+
+        function initializeChart() {
+            let ctx = document.getElementById('cpuChart').getContext('2d');
+            cpuChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: cpuLabels,
+                    datasets: [{
+                        label: 'CPU Usage (%)',
+                        data: cpuData,
+                        borderColor: 'rgba(75, 192, 192, 0.8)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100
+                        },
+                    }
+                }
+                /* responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100
+                    },
+                    x: {
+                        type: 'time',
+                        time: {
+                            unit: 'second'
+                        }
+                    }
+                } */
+
+            });
+        }
+
+
+        function formatSpeed_bits(speedInBitsPerSecond) {
+            let speedInKbps = speedInBitsPerSecond / 1024;  // Convert bits to kilobits
+            if (speedInKbps < 1024) {
+                return `${speedInKbps.toFixed(2)} Kbps`;
+            } else {
+                let speedInMbps = speedInKbps / 1024;  // Convert kilobits to megabits
+                return `${speedInMbps.toFixed(2)} Mbps`;
+            }
+        }
+        function formatSpeed_bytes(speedInBitsPerSecond) {
+            let speedInBytesPerSecond = speedInBitsPerSecond / 8; // Convert Bits to Bytes
+            let speedInKBps = speedInBytesPerSecond / 1024;  // Convert Bytes to KiloBytes
+            if (speedInKBps < 1024) {
+                return `(${speedInKBps.toFixed(2)} KB/s)`;
+            } else {
+                let speedInMBps = speedInKBps / 1024;  // Convert kilobytes to megabytes
+                return `(${speedInMBps.toFixed(2)} MB/s)`;
+            }
+        }
+
+        function refreshData() {
+            if (!isRefreshing) {
+                return;
+            }
+
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('cpu-usage').textContent = data.total_cpu;
+                    document.getElementById('cpu-per-core').textContent = data.cpu;
+                    document.getElementById('ram-usage').textContent = data.ram;
+                    document.getElementById('disk-read').textContent = formatSpeed_bits(data.disk.read_speed) + ' ' + formatSpeed_bytes(data.disk.read_speed);
+                    document.getElementById('disk-write').textContent = formatSpeed_bits(data.disk.write_speed) + ' ' + formatSpeed_bytes(data.disk.write_speed);
+                    document.getElementById('network-send').textContent = formatSpeed_bits(data.network.sent_speed) + ' ' + formatSpeed_bytes(data.network.sent_speed);
+                    document.getElementById('network-receive').textContent = formatSpeed_bits(data.network.recv_speed) + ' ' + formatSpeed_bytes(data.network.recv_speed);
+                    document.getElementById('machine-name').textContent = data.machine.name;
+                    cpuData.push(data.total_cpu);
+                    cpuLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
+                    if (cpuData.length > 60) {  // Keep only the last 60 data points
+                        cpuData.shift();
+                        cpuLabels.shift();
+                    }
+                    cpuChart.update();
+                })
+                .catch((error) => {
+                    console.error('Error:', error);
+                });
+
+            setTimeout(refreshData, 3000);
+        }
+
+
+        function toggleRefresh() {
+            isRefreshing = !isRefreshing;
+            const buttonText = isRefreshing ? "Stop refreshing" : "Start refreshing";
+            document.getElementById('refresh-button').textContent = buttonText;
+            refreshData();
+        }
+        window.onload = function () {
+            initializeChart();
+            refreshData();
+        }
+    </script>
+</head>
+
+<body>
+    <h1>System Vitals</h1>
+    <h2>Displaying system vitals for: <span id="machine-name"></span></h2>
+    <button id="refresh-button" onclick="toggleRefresh()">Stop refreshing</button>
+    <h2>CPU Usage</h2>
+    <div id="cpu" style="max-height: 800px; max-width: 600px;">
+        <p>Total: <span id="cpu-usage"></span>%</p>
+        <p>Per Core: <span id="cpu-per-core"></span></p>
+        <canvas id="cpuChart"></canvas>
+    </div>
+    <h2>RAM Usage</h2>
+    <p><span id="ram-usage"></span>%</p>
+    <h2>Disk IO (Kbps/Mbps)</h2>
+    <p>Read: <span id="disk-read"></span></p>
+    <p>Write: <span id="disk-write"></span></p>
+    <h2>Network (Kbps/Mbps)</h2>
+    <p>Send: <span id="network-send"></span></p>
+    <p>Receive: <span id="network-receive"></span></p>
+
+    
+</body>
+
+</html>

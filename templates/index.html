@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="icon" type="image/png" href="/static/favicon.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap"
+        rel="stylesheet">
+
+    <title>System Vitals</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+
+        let isRefreshing = true;
+
+        let INTERVAL;
+
+        let CACHE = 60;
+
+        let cpuData = [];
+        let cpuLabels = [];
+        let cpuChart;
+
+        let ramData = [];
+        let ramLabels = [];
+        let ramChart;
+
+        let diskData_read = [];
+        let diskData_write = [];
+        let diskLabels = [];
+        let diskChart;
+
+        let networkData_send = [];
+        let networkData_receive = [];
+        let networkLabels = [];
+        let networkChart;
+
+
+
+        function initializeChart() {
+            let ctx = document.getElementById('cpuChart').getContext('2d');
+            cpuChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: cpuLabels,
+                    datasets: [{
+                        label: 'CPU Usage (%)',
+                        data: cpuData,
+                        borderColor: 'rgba(75, 192, 192, 0.8)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100
+                        },
+                    }
+                }
+
+            });
+            let ramCtx = document.getElementById('ramChart').getContext('2d');
+            ramChart = new Chart(ramCtx, {
+                type: 'line',
+                data: {
+                    labels: ramLabels,
+                    datasets: [{
+                        label: 'RAM Usage (%)',
+                        data: ramData,
+                        borderColor: 'rgba(75, 0, 192, 0.8)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            min: 0,
+                            max: 100
+                        },
+                    }
+                }
+            });
+            let diskCtx = document.getElementById('diskChart').getContext('2d');
+            diskChart = new Chart(diskCtx, {
+                type: 'line',
+                data: {
+                    labels: diskLabels,
+                    datasets: [{
+                        label: 'Disk Read Speed',
+                        data: diskData_read,
+                        borderColor: 'rgba(75, 0, 192, 0.8)',
+                        borderWidth: 1
+                    }, {
+                        label: 'Disk Write Speed',
+                        data: diskData_write,
+                        borderColor: 'rgba(75, 100, 192, 0.8)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    label += formatSpeed_bits(context.parsed.y) + ' ' + formatSpeed_bytes(context.parsed.y);
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            let networkCtx = document.getElementById('networkChart').getContext('2d');
+            networkChart = new Chart(networkCtx, {
+                type: 'line',
+                data: {
+                    labels: networkLabels,
+                    datasets: [{
+                        label: 'Network Send Speed',
+                        data: networkData_send,
+                        borderColor: 'rgba(255, 99, 132, 0.8)',
+                        borderWidth: 1
+                    }, {
+                        label: 'Network Receive Speed',
+                        data: networkData_receive,
+                        borderColor: 'rgba(54, 162, 235, 0.8)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    plugins: {
+                        tooltip: {
+                            callbacks: {
+                                label: function (context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) label += ': ';
+                                    label += formatSpeed_bits(context.parsed.y) + ' ' + formatSpeed_bytes(context.parsed.y);
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+
+
+
+
+        function formatSpeed_toString(speedInBitsPerSecond, format) {
+            if (typeof speedInBitsPerSecond !== 'number' || speedInBitsPerSecond < 0 || typeof format !== 'string') {
+                throw new Error("Invalid input");
+            }
+            format = format.toLowerCase();
+            if (format == 'bits') {
+                let speedInKbps = speedInBitsPerSecond / 1024;  // Convert bits to kilobits
+                if (speedInKbps < 1024) {
+                    return `${speedInKbps.toFixed(2)} Kbps`;
+                } else {
+                    let speedInMbps = speedInKbps / 1024;  // Convert kilobits to megabits
+                    return `${speedInMbps.toFixed(2)} Mbps`;
+                }
+            }
+            else if (format == 'bytes') {
+                let speedInBytesPerSecond = speedInBitsPerSecond / 8; // Convert Bits to Bytes
+                let speedInKBps = speedInBytesPerSecond / 1024;  // Convert Bytes to KiloBytes
+                if (speedInKBps < 1024) {
+                    return `(${speedInKBps.toFixed(2)} KB/s)`;
+                } else {
+                    let speedInMBps = speedInKBps / 1024;  // Convert kilobytes to megabytes
+                    return `(${speedInMBps.toFixed(2)} MB/s)`;
+                }
+            }
+            else if (format == 'both') {
+                return formatSpeed_toString(speedInBitsPerSecond, 'bits') + ' ' + formatSpeed_toString(speedInBitsPerSecond, 'bytes');
+            }
+            else {
+                throw new Error("Invalid format type. Use 'bits', 'bytes' or 'both'");
+            }
+        }
+
+        function refreshData() {
+            if (!isRefreshing) {
+                return;
+            }
+
+            fetch('/data')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    document.getElementById('error-message').textContent = "";
+                    document.getElementById('cpu-usage').textContent = data.total_cpu;
+                    document.getElementById('cpu-per-core').textContent = String(data.cpu).replaceAll(',', ' | ');
+                    document.getElementById('ram-usage').textContent = data.ram;
+                    document.getElementById('disk-read').textContent = formatSpeed_toString(data.disk.read_speed, 'both');
+                    document.getElementById('disk-write').textContent = formatSpeed_toString(data.disk.write_speed, 'both');
+                    document.getElementById('network-send').textContent = formatSpeed_toString(data.network.sent_speed, 'both');
+                    document.getElementById('network-receive').textContent = formatSpeed_toString(data.network.recv_speed, 'both');
+                    document.getElementById('machine-name').textContent = data.machine.name;
+                    INTERVAL = data.settings.interval;
+                    CACHE = data.settings.cache;
+                    cpuData.push(data.total_cpu);
+                    cpuLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
+                    if (cpuData.length > CACHE) {  // Keep only the last CACHE data points
+                        cpuData.shift();
+                        cpuLabels.shift();
+                    }
+                    cpuChart.update();
+                    document.getElementById('ram-usage').textContent = data.ram;
+                    ramData.push(data.ram);
+                    ramLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
+                    if (ramData.length > CACHE) {  // Keep only the last CACHE data points
+                        ramData.shift();
+                        ramLabels.shift();
+                    }
+                    ramChart.update();
+
+                    diskData_read.push(data.disk.read_speed);
+                    diskData_write.push(data.disk.write_speed);
+                    let diskData_read_average = diskData_read.reduce((a, b) => a + b, 0) / diskData_read.length;
+                    let diskData_write_average = diskData_write.reduce((a, b) => a + b, 0) / diskData_write.length;
+                    document.getElementById('disk-read-average').textContent = formatSpeed_toString(diskData_read_average, 'both');
+                    document.getElementById('disk-write-average').textContent = formatSpeed_toString(diskData_write_average, 'both');
+                    diskLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
+                    if (diskData_read.length > CACHE) {  // Keep only the last CACHE data points
+                        diskData_read.shift();
+                        diskLabels.shift();
+                    }
+                    if (diskData_write.length > CACHE) {  // Keep only the last CACHE data points
+                        diskData_write.shift();
+                        // we don't need to shift diskLabels again here, because it's shared between read and write
+                    }
+                    diskChart.update();
+
+                    networkData_send.push(data.network.sent_speed);
+                    networkData_receive.push(data.network.recv_speed);
+                    let networkData_send_average = networkData_send.reduce((a, b) => a + b, 0) / networkData_send.length;
+                    let networkData_receive_average = networkData_receive.reduce((a, b) => a + b, 0) / networkData_receive.length;
+                    document.getElementById('network-send-average').textContent = formatSpeed_toString(networkData_send_average, 'both');
+                    document.getElementById('network-receive-average').textContent = formatSpeed_toString(networkData_receive_average, 'both');
+                    networkLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
+                    if (networkData_send.length > CACHE) {  // Keep only the last CACHE data points
+                        networkData_send.shift();
+                        networkLabels.shift();
+                    }
+                    if (networkData_receive.length > CACHE) {  // Keep only the last CACHE data points
+                        networkData_receive.shift();
+                        // we don't need to shift networkLabels again here, because it's shared between send and receive
+                    }
+                    networkChart.update();
+                })
+                .catch((error) => {
+                    console.error('There has been a problem with your fetch operation: ', error);
+                    // Display an error message in the UI:
+                    document.getElementById('error-message').textContent = "Error while fetching data. Possibly the server is down.";
+                });
+
+            setTimeout(refreshData, INTERVAL);
+        }
+
+
+        function toggleRefresh() {
+            isRefreshing = !isRefreshing;
+            const buttonText = isRefreshing ? "Stop refreshing" : "Start refreshing";
+            document.getElementById('refresh-button').textContent = buttonText;
+            refreshData();
+        }
+        window.onload = function () {
+            initializeChart();
+            refreshData();
+        }
+    </script>
+</head>
+
+<body>
+    <h1>System Vitals</h1>
+    <h2>Displaying system vitals for: <span id="machine-name"></span></h2>
+    <p id="error-message" style="color: red;"></p>
+    <div class="grid-container">
+        <div id="cpu" class="grid-item">
+            <h2>CPU Usage</h2>
+            <p>Total: <span id="cpu-usage"></span>%</p>
+            <canvas id="cpuChart" class="chart"></canvas>
+            <p>Per Core: <span id="cpu-per-core"></span></p>
+        </div>
+        <div id="ram" class="grid-item">
+            <h2>RAM Usage</h2>
+            <p>Total: <span id="ram-usage"></span>%</p>
+            <canvas id="ramChart" class="chart"></canvas>
+        </div>
+        <div id="disk" class="grid-item">
+            <h2>Disk IO</h2>
+            <div class="data-grid">
+                <div>
+                    <p>Read: <span id="disk-read"></span></p>
+                    <p>Write: <span id="disk-write"></span></p>
+                </div>
+                <div>
+                    <p>Average: <span id="disk-read-average"></span></p>
+                    <p>Average: <span id="disk-write-average"></span></p>
+                </div>
+            </div>
+            <canvas id="diskChart" class="chart"></canvas>
+        </div>
+        <div id="network" class="grid-item">
+            <h2>Network</h2>
+            <div class="data-grid">
+                <div>
+                    <p>Send: <span id="network-send"></span> </p>
+                    <p>Receive: <span id="network-receive"></span> </p>
+                </div>
+                <div>
+                    <p>Average: <span id="network-receive-average"></span></p>
+                    <p>Average: <span id="network-send-average"></span></p>
+                </div>
+            </div>
+            <canvas id="networkChart" class="chart"></canvas>
+
+        </div>
+
+    </div>
+    <button id="refresh-button" onclick="toggleRefresh()">Stop refreshing</button>
+</body>
+<footer>
+    <p>© 2023 - Shahaf Shavit | Home Server Monitor v1.2</p>
+</footer>
+
+
+</html>
