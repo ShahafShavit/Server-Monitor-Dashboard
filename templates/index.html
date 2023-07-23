@@ -19,35 +19,43 @@
 
         let CACHE = 60;
 
-        let cpuData = [];
-        let cpuLabels = [];
-        let cpuChart;
+        const cpu = {
+            data: [],
+            labels: [],
+            chart: null
+        };
 
-        let ramData = [];
-        let ramLabels = [];
-        let ramChart;
+        const ram = {
+            data: [],
+            labels: [],
+            chart: null
+        };
 
-        let diskData_read = [];
-        let diskData_write = [];
-        let diskLabels = [];
-        let diskChart;
+        const disk = {
+            data_read: [],
+            data_write: [],
+            labels: [],
+            chart: null
+        };
 
-        let networkData_send = [];
-        let networkData_receive = [];
-        let networkLabels = [];
-        let networkChart;
+        const network = {
+            data_send: [],
+            data_receive: [],
+            labels: [],
+            chart: null
+        };
 
 
 
         function initializeChart() {
             let ctx = document.getElementById('cpuChart').getContext('2d');
-            cpuChart = new Chart(ctx, {
+            cpu.chart = new Chart(ctx, {
                 type: 'line',
                 data: {
-                    labels: cpuLabels,
+                    labels: cpu.labels,
                     datasets: [{
                         label: 'CPU Usage (%)',
-                        data: cpuData,
+                        data: cpu.data,
                         borderColor: 'rgba(75, 192, 192, 0.8)',
                         borderWidth: 1
                     }]
@@ -64,13 +72,13 @@
 
             });
             let ramCtx = document.getElementById('ramChart').getContext('2d');
-            ramChart = new Chart(ramCtx, {
+            ram.chart = new Chart(ramCtx, {
                 type: 'line',
                 data: {
-                    labels: ramLabels,
+                    labels: ram.labels,
                     datasets: [{
                         label: 'RAM Usage (%)',
-                        data: ramData,
+                        data: ram.data,
                         borderColor: 'rgba(75, 0, 192, 0.8)',
                         borderWidth: 1
                     }]
@@ -86,30 +94,31 @@
                 }
             });
             let diskCtx = document.getElementById('diskChart').getContext('2d');
-            diskChart = new Chart(diskCtx, {
+            disk.chart = new Chart(diskCtx, {
                 type: 'line',
                 data: {
-                    labels: diskLabels,
+                    labels: disk.labels,
                     datasets: [{
                         label: 'Disk Read Speed',
-                        data: diskData_read,
+                        data: disk.data_read,
                         borderColor: 'rgba(75, 0, 192, 0.8)',
                         borderWidth: 1
                     }, {
                         label: 'Disk Write Speed',
-                        data: diskData_write,
+                        data: disk.data_write,
                         borderColor: 'rgba(75, 100, 192, 0.8)',
                         borderWidth: 1
                     }]
                 },
                 options: {
+                    responsive: true,
                     plugins: {
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
                                     let label = context.dataset.label || '';
                                     if (label) label += ': ';
-                                    label += formatSpeed_bits(context.parsed.y) + ' ' + formatSpeed_bytes(context.parsed.y);
+                                    label += formatSpeed_toString(context.parsed.y, 'both');
                                     return label;
                                 }
                             }
@@ -118,30 +127,31 @@
                 }
             });
             let networkCtx = document.getElementById('networkChart').getContext('2d');
-            networkChart = new Chart(networkCtx, {
+            network.chart = new Chart(networkCtx, {
                 type: 'line',
                 data: {
-                    labels: networkLabels,
+                    labels: network.labels,
                     datasets: [{
                         label: 'Network Send Speed',
-                        data: networkData_send,
+                        data: network.data_send,
                         borderColor: 'rgba(255, 99, 132, 0.8)',
                         borderWidth: 1
                     }, {
                         label: 'Network Receive Speed',
-                        data: networkData_receive,
+                        data: network.data_receive,
                         borderColor: 'rgba(54, 162, 235, 0.8)',
                         borderWidth: 1
                     }]
                 },
                 options: {
+                    responsive: true,
                     plugins: {
                         tooltip: {
                             callbacks: {
                                 label: function (context) {
                                     let label = context.dataset.label || '';
                                     if (label) label += ': ';
-                                    label += formatSpeed_bits(context.parsed.y) + ' ' + formatSpeed_bytes(context.parsed.y);
+                                    label += formatSpeed_toString(context.parsed.y, 'both');
                                     return label;
                                 }
                             }
@@ -151,9 +161,24 @@
             });
         }
 
+        function updateChartData(componentObj, cacheDataArr, fresh_data, currentTime) {
 
+            cacheDataArr.push(fresh_data);
+            componentObj.labels.push(currentTime);
+            if (cacheDataArr.length > CACHE) {
+                cacheDataArr.shift();
+                componentObj.labels.shift();
+            }
+            componentObj.chart.update();
+        }
 
+        function calculateAverage(array) {
+            var sum = array.reduce(function (a, b) {
+                return a + b;
+            }, 0);
 
+            return sum / array.length;
+        }
 
         function formatSpeed_toString(speedInBitsPerSecond, format) {
             if (typeof speedInBitsPerSecond !== 'number' || speedInBitsPerSecond < 0 || typeof format !== 'string') {
@@ -199,67 +224,30 @@
                     }
                     return response.json();
                 })
-                .then(data => {
+                .then(fresh_data => {
                     document.getElementById('error-message').textContent = "";
-                    document.getElementById('cpu-usage').textContent = data.total_cpu;
-                    document.getElementById('cpu-per-core').textContent = String(data.cpu).replaceAll(',', ' | ');
-                    document.getElementById('ram-usage').textContent = data.ram;
-                    document.getElementById('disk-read').textContent = formatSpeed_toString(data.disk.read_speed, 'both');
-                    document.getElementById('disk-write').textContent = formatSpeed_toString(data.disk.write_speed, 'both');
-                    document.getElementById('network-send').textContent = formatSpeed_toString(data.network.sent_speed, 'both');
-                    document.getElementById('network-receive').textContent = formatSpeed_toString(data.network.recv_speed, 'both');
-                    document.getElementById('machine-name').textContent = data.machine.name;
-                    INTERVAL = data.settings.interval;
-                    CACHE = data.settings.cache;
-                    cpuData.push(data.total_cpu);
-                    cpuLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
-                    if (cpuData.length > CACHE) {  // Keep only the last CACHE data points
-                        cpuData.shift();
-                        cpuLabels.shift();
-                    }
-                    cpuChart.update();
-                    document.getElementById('ram-usage').textContent = data.ram;
-                    ramData.push(data.ram);
-                    ramLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
-                    if (ramData.length > CACHE) {  // Keep only the last CACHE data points
-                        ramData.shift();
-                        ramLabels.shift();
-                    }
-                    ramChart.update();
+                    document.getElementById('cpu-usage').textContent = fresh_data.total_cpu;
+                    document.getElementById('cpu-per-core').textContent = String(fresh_data.cpu).replaceAll(',', ' | ');
+                    document.getElementById('ram-usage').textContent = fresh_data.ram;
+                    document.getElementById('disk-read').textContent = formatSpeed_toString(fresh_data.disk.read_speed, 'both');
+                    document.getElementById('disk-write').textContent = formatSpeed_toString(fresh_data.disk.write_speed, 'both');
+                    document.getElementById('disk-read-average').textContent = formatSpeed_toString(calculateAverage(disk.data_read), 'both');
+                    document.getElementById('disk-write-average').textContent = formatSpeed_toString(calculateAverage(disk.data_write), 'both');
+                    document.getElementById('network-send').textContent = formatSpeed_toString(fresh_data.network.sent_speed, 'both');
+                    document.getElementById('network-receive').textContent = formatSpeed_toString(fresh_data.network.recv_speed, 'both');
+                    document.getElementById('network-send-average').textContent = formatSpeed_toString(calculateAverage(network.data_send), 'both');
+                    document.getElementById('network-receive-average').textContent = formatSpeed_toString(calculateAverage(network.data_receive), 'both');
+                    document.getElementById('machine-name').textContent = fresh_data.machine.name;
 
-                    diskData_read.push(data.disk.read_speed);
-                    diskData_write.push(data.disk.write_speed);
-                    let diskData_read_average = diskData_read.reduce((a, b) => a + b, 0) / diskData_read.length;
-                    let diskData_write_average = diskData_write.reduce((a, b) => a + b, 0) / diskData_write.length;
-                    document.getElementById('disk-read-average').textContent = formatSpeed_toString(diskData_read_average, 'both');
-                    document.getElementById('disk-write-average').textContent = formatSpeed_toString(diskData_write_average, 'both');
-                    diskLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
-                    if (diskData_read.length > CACHE) {  // Keep only the last CACHE data points
-                        diskData_read.shift();
-                        diskLabels.shift();
-                    }
-                    if (diskData_write.length > CACHE) {  // Keep only the last CACHE data points
-                        diskData_write.shift();
-                        // we don't need to shift diskLabels again here, because it's shared between read and write
-                    }
-                    diskChart.update();
-
-                    networkData_send.push(data.network.sent_speed);
-                    networkData_receive.push(data.network.recv_speed);
-                    let networkData_send_average = networkData_send.reduce((a, b) => a + b, 0) / networkData_send.length;
-                    let networkData_receive_average = networkData_receive.reduce((a, b) => a + b, 0) / networkData_receive.length;
-                    document.getElementById('network-send-average').textContent = formatSpeed_toString(networkData_send_average, 'both');
-                    document.getElementById('network-receive-average').textContent = formatSpeed_toString(networkData_receive_average, 'both');
-                    networkLabels.push(new Date().toLocaleTimeString());  // Use the current time as the label
-                    if (networkData_send.length > CACHE) {  // Keep only the last CACHE data points
-                        networkData_send.shift();
-                        networkLabels.shift();
-                    }
-                    if (networkData_receive.length > CACHE) {  // Keep only the last CACHE data points
-                        networkData_receive.shift();
-                        // we don't need to shift networkLabels again here, because it's shared between send and receive
-                    }
-                    networkChart.update();
+                    INTERVAL = fresh_data.settings.interval;
+                    CACHE = fresh_data.settings.cache;
+                    let currentTime = new Date().toLocaleTimeString();
+                    updateChartData(cpu, cpu.data, fresh_data.total_cpu, currentTime);
+                    updateChartData(ram, ram.data, fresh_data.ram, currentTime);
+                    updateChartData(disk, disk.data_read, fresh_data.disk.read_speed, currentTime);
+                    updateChartData(disk, disk.data_write, fresh_data.disk.write_speed, currentTime);
+                    updateChartData(network, network.data_send, fresh_data.network.sent_speed, currentTime);
+                    updateChartData(network, network.data_receive, fresh_data.network.recv_speed, currentTime);
                 })
                 .catch((error) => {
                     console.error('There has been a problem with your fetch operation: ', error);

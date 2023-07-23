@@ -34,11 +34,10 @@ state = {
 
 disk_io_start = psutil.disk_io_counters()
 disk_io = psutil.disk_io_counters(perdisk=True)
-print(disk_io['PhysicalDrive1'])
 net_io_start = psutil.net_io_counters()
 time_start = time.time()
 
-# This is the function that will be running in a separate thread, updating the state every second
+# This is the function that will be running in a separate thread, updating the state INTERVAL
 def update_state():
     global state, disk_io_start, net_io_start, time_start
     while True:
