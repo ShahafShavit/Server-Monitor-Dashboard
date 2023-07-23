@@ -55,9 +55,9 @@ To use the virtual environment, you need to activate it:
 5. **Install Required Python Packages**
 
 With your virtual environment activated, install the Python packages that the project needs:
-
+```
 pip install -r requirements.txt
-
+```
 
 ## Running the Project
 
