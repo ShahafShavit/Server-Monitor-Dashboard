@@ -161,13 +161,16 @@
             });
         }
 
-        function updateChartData(componentObj, cacheDataArr, fresh_data, currentTime) {
-
+        function updateChartData(componentObj, cacheDataArr, fresh_data, shouldUpdateLabel) {
             cacheDataArr.push(fresh_data);
-            componentObj.labels.push(currentTime);
+            if (shouldUpdateLabel) {
+                componentObj.labels.push(new Date().toLocaleTimeString());
+            }
             if (cacheDataArr.length > CACHE) {
                 cacheDataArr.shift();
-                componentObj.labels.shift();
+                if (shouldUpdateLabel) {
+                    componentObj.labels.shift();
+                }
             }
             componentObj.chart.update();
         }
@@ -238,16 +241,15 @@
                     document.getElementById('network-send-average').textContent = formatSpeed_toString(calculateAverage(network.data_send), 'both');
                     document.getElementById('network-receive-average').textContent = formatSpeed_toString(calculateAverage(network.data_receive), 'both');
                     document.getElementById('machine-name').textContent = fresh_data.machine.name;
-
                     INTERVAL = fresh_data.settings.interval;
                     CACHE = fresh_data.settings.cache;
-                    let currentTime = new Date().toLocaleTimeString();
-                    updateChartData(cpu, cpu.data, fresh_data.total_cpu, currentTime);
-                    updateChartData(ram, ram.data, fresh_data.ram, currentTime);
-                    updateChartData(disk, disk.data_read, fresh_data.disk.read_speed, currentTime);
-                    updateChartData(disk, disk.data_write, fresh_data.disk.write_speed, currentTime);
-                    updateChartData(network, network.data_send, fresh_data.network.sent_speed, currentTime);
-                    updateChartData(network, network.data_receive, fresh_data.network.recv_speed, currentTime);
+
+                    updateChartData(cpu, cpu.data, fresh_data.total_cpu, true);
+                    updateChartData(ram, ram.data, fresh_data.ram, true);
+                    updateChartData(disk, disk.data_read, fresh_data.disk.read_speed, true);
+                    updateChartData(disk, disk.data_write, fresh_data.disk.write_speed, false);
+                    updateChartData(network, network.data_send, fresh_data.network.sent_speed, true);
+                    updateChartData(network, network.data_receive, fresh_data.network.recv_speed, false);
                 })
                 .catch((error) => {
                     console.error('There has been a problem with your fetch operation: ', error);
