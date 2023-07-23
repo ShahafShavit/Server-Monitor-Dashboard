@@ -30,13 +30,13 @@ Follow the steps below to install and run the project:
 
 Change your current working directory to the newly cloned repository:
 ```
-cd RealTimeResourceMonitor
+cd Server-Monitor-Dashboard
 ```
 3. **Create a Virtual Environment**
 
 Use the `venv` module that comes with Python to create a virtual environment:
 ```
-python3 -m venv venv
+python -m venv venv
 ```
 
 4. **Activate the Virtual Environment**
